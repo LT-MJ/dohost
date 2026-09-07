@@ -1,28 +1,25 @@
 {
-  "name": "@hostpanel/core",
+  "name": "@hostpanel/seed",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "exports": {
-    ".": "./src/index.ts"
-  },
   "scripts": {
+    "seed": "tsx src/seed.ts",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint . --max-warnings=0",
-    "test": "vitest run --passWithNoTests",
-    "clean": "rm -rf dist .turbo"
+    "lint": "eslint . --max-warnings=0"
   },
   "dependencies": {
     "@hostpanel/auth": "workspace:*",
+    "@hostpanel/billing": "workspace:*",
+    "@hostpanel/core": "workspace:*",
     "@hostpanel/db": "workspace:*",
-    "@hostpanel/jobs": "workspace:*",
     "@hostpanel/shared": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "eslint": "^10.10.0",
+    "tsx": "^4.23.13",
     "typescript": "^5.7.3",
-    "typescript-eslint": "^8.70.0",
-    "vitest": "^5.0.0"
+    "typescript-eslint": "^8.70.0"
   }
 }

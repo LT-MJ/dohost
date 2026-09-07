@@ -9,7 +9,7 @@ import { PERMISSIONS } from "@hostpanel/shared/permissions";
 import { nextSequenceNumber } from "./numbering";
 import { transitionOrderStatus } from "./orders";
 
-const INVOICE_TRANSITIONS: Record<InvoiceStatus, InvoiceStatus[]> = {
+export const INVOICE_TRANSITIONS: Record<InvoiceStatus, InvoiceStatus[]> = {
   DRAFT: ["ISSUED", "CANCELLED"],
   ISSUED: ["PARTIALLY_PAID", "PAID", "OVERDUE", "CANCELLED"],
   UNPAID: ["PARTIALLY_PAID", "PAID", "OVERDUE", "CANCELLED"],
@@ -20,6 +20,11 @@ const INVOICE_TRANSITIONS: Record<InvoiceStatus, InvoiceStatus[]> = {
   CANCELLED: [],
   REFUNDED: [],
 };
+
+/** Pure state-machine check, unit-testable without a database. */
+export function isValidInvoiceTransition(from: InvoiceStatus, to: InvoiceStatus): boolean {
+  return (INVOICE_TRANSITIONS[from] ?? []).includes(to);
+}
 
 /** Default net terms until the (Phase 6) dunning/tax engine makes this configurable. */
 const DEFAULT_NET_TERMS_DAYS = 7;
@@ -34,8 +39,7 @@ async function transitionInvoiceStatus(
   reason?: string,
 ): Promise<Invoice> {
   const invoice = await tx.invoice.findUniqueOrThrow({ where: { id: invoiceId } });
-  const allowed = INVOICE_TRANSITIONS[invoice.status] ?? [];
-  if (!allowed.includes(toStatus)) {
+  if (!isValidInvoiceTransition(invoice.status, toStatus)) {
     throw new BusinessRuleError({
       code: "invoice.invalid_transition",
       message: `Cannot move an invoice from ${invoice.status} to ${toStatus}.`,

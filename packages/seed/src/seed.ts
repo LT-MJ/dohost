@@ -10,7 +10,7 @@ import {
   STAFF_ROLE_KEYS,
   STAFF_ROLE_LABELS,
 } from "@hostpanel/shared/permissions";
-import { prisma } from "../src/client";
+import { prisma } from "@hostpanel/db";
 
 const rootEnvPath = path.resolve(import.meta.dirname, "../../../.env");
 if (existsSync(rootEnvPath) && !process.env.DATABASE_URL) {

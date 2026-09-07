@@ -11,7 +11,12 @@ export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
-    seed: "tsx prisma/seed.ts",
+    // Lives in packages/seed, not this package: the seed script needs the
+    // domain services (@hostpanel/core, @hostpanel/billing), which
+    // themselves depend on @hostpanel/db — keeping seed.ts here would make
+    // this package depend on its own dependents, a real cycle that breaks
+    // Turborepo's task graph (pnpm tolerates it, Turborepo does not).
+    seed: "tsx ../seed/src/seed.ts",
   },
   datasource: {
     url: env("DATABASE_URL"),

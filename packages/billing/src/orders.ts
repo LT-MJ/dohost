@@ -9,7 +9,7 @@ import { add, money, multiply, zero } from "@hostpanel/shared/money";
 import { PERMISSIONS } from "@hostpanel/shared/permissions";
 import { nextSequenceNumber } from "./numbering";
 
-const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
+export const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   PENDING: ["AWAITING_PAYMENT", "CANCELLED", "FRAUD_REVIEW"],
   AWAITING_PAYMENT: ["PAID", "CANCELLED", "FAILED", "FRAUD_REVIEW"],
   PAID: ["PROCESSING", "REFUNDED", "FRAUD"],
@@ -21,6 +21,11 @@ const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   REFUNDED: [],
   FAILED: ["AWAITING_PAYMENT", "CANCELLED"],
 };
+
+/** Pure state-machine check, unit-testable without a database. */
+export function isValidOrderTransition(from: OrderStatus, to: OrderStatus): boolean {
+  return (ORDER_TRANSITIONS[from] ?? []).includes(to);
+}
 
 type TransitionActor = { type: "STAFF" | "CLIENT_CONTACT" | "SYSTEM"; id: string | null; label?: string };
 
@@ -34,8 +39,7 @@ export async function transitionOrderStatus(
   reason?: string,
 ) {
   const order = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
-  const allowed = ORDER_TRANSITIONS[order.status] ?? [];
-  if (!allowed.includes(toStatus)) {
+  if (!isValidOrderTransition(order.status, toStatus)) {
     throw new BusinessRuleError({
       code: "order.invalid_transition",
       message: `Cannot move an order from ${order.status} to ${toStatus}.`,

@@ -15,7 +15,7 @@
     "seed": "prisma db seed",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings=0",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "clean": "rm -rf dist .turbo generated"
   },
   "dependencies": {
@@ -25,9 +25,6 @@
     "pg": "^8.23.0"
   },
   "devDependencies": {
-    "@hostpanel/auth": "workspace:*",
-    "@hostpanel/billing": "workspace:*",
-    "@hostpanel/core": "workspace:*",
     "@types/node": "^22.10.0",
     "@types/pg": "^8.23.1",
     "dotenv": "^17.4.2",
