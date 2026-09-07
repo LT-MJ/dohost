@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auth } from "@/auth";
 
-const STAFF_PUBLIC_PATHS = ["/admin/login", "/admin/set-password", "/admin/reset-password"];
+const STAFF_PUBLIC_PATHS = ["/admin/login", "/admin/set-password", "/admin/reset-password", "/admin/setup"];
 const CLIENT_PUBLIC_PATHS = ["/login", "/register", "/verify-email", "/reset-password", "/"];
 
 /**

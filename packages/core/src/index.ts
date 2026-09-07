@@ -1,4 +1,5 @@
 export * from "./login-guard";
+export * from "./setup";
 export * from "./tenant";
 export * from "./staff";
 export * from "./clients";

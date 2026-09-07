@@ -93,10 +93,20 @@ Three independent processes, plus two managed services:
   way to create the first staff account is the seed script or a direct
   database insert — a gap worth closing before a real production launch).
 
+## First production admin account
+
+`/admin/setup` creates the tenant (if missing) and a single `super_admin`
+StaffUser with a password you choose directly in the form — it replaces
+running the seed script (which creates known dev passwords) or a manual
+database insert. It works exactly once: the moment any StaffUser exists
+for the tenant, it refuses outright and just links to `/admin/login`
+instead of rendering the form. There's no separate token gating it —
+its safety is that narrow, self-closing window, not a secret — so use it
+immediately after your first successful production deploy, before
+sharing the URL with anyone else.
+
 ## Not yet built
 
-- A first-run / initial-setup flow that replaces "run the seed script" for
-  production.
 - Health-check endpoints for `apps/web`/`apps/worker` suitable for a load
   balancer or orchestrator.
 - Structured deploy automation (this repo has no CI/CD pipeline

@@ -99,6 +99,22 @@ granularity. Ownership checks (a client can only act on their own
 `clientId`) are enforced in the domain services themselves (e.g.
 `createOrder`, `updateClientProfile`), not just at the route layer.
 
+## First-run production setup
+
+`/admin/setup` (`packages/core/src/setup.ts`) creates the tenant and the
+first `super_admin` StaffUser for a fresh production database — the
+one unauthenticated route in the app that creates a privileged account.
+It carries no separate access token; the guard is that it refuses
+outright (`setup.already_completed`) the instant any StaffUser exists
+for the tenant, re-checked inside the same transaction that creates the
+account to close the race between two concurrent submissions. There is
+no legitimate reason for a StaffUser to ever be absent in a real
+production tenant after the first successful submission, so the route
+is permanently inert from that point on — not disabled by a flag, just
+structurally unable to do anything. Treat the window between "first
+successful deploy" and "first setup submission" as sensitive: don't
+publicize the URL before using it.
+
 ## Audit logging
 
 See ARCHITECTURE.md. Append-only by convention (no code path calls
