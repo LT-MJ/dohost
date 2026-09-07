@@ -1,0 +1,46 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+.next/
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# turbo
+.turbo/
+
+# env
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# testing
+coverage/
+test-results/
+playwright-report/
+blob-report/
+
+# prisma
+packages/db/generated/
+
+# misc
+.DS_Store
+*.pem
+.vercel
+
+# editors
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# local data volumes
+.docker-data/

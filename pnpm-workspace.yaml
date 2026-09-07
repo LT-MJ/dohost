@@ -1,0 +1,16 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# Next.js's own build tooling (sharp, unrs-resolver) ships install/postinstall
+# scripts; pnpm's default policy blocks arbitrary lifecycle scripts from
+# dependencies as a supply-chain safeguard, so they're explicitly ignored
+# here rather than silently allowed.
+ignoredBuiltDependencies:
+  - sharp
+  - unrs-resolver
+onlyBuiltDependencies:
+  - '@prisma/engines'
+  - esbuild
+  - msgpackr-extract
+  - prisma

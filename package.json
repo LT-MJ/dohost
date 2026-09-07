@@ -1,0 +1,31 @@
+{
+  "name": "hostpanel",
+  "private": true,
+  "version": "0.1.0",
+  "description": "HostPanel - hosting, domain, billing and client management platform",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:e2e": "turbo run test:e2e",
+    "db:generate": "pnpm --filter @hostpanel/db generate",
+    "db:migrate": "pnpm --filter @hostpanel/db migrate:dev",
+    "db:migrate:deploy": "pnpm --filter @hostpanel/db migrate:deploy",
+    "db:seed": "pnpm --filter @hostpanel/db seed",
+    "db:studio": "pnpm --filter @hostpanel/db studio",
+    "format": "prettier --write .",
+    "clean": "turbo run clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "turbo": "^2.10.12",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.70.0"
+  }
+}

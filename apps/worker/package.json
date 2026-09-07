@@ -1,0 +1,38 @@
+{
+  "name": "@hostpanel/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --max-warnings=0",
+    "test": "vitest run",
+    "clean": "rm -rf dist .turbo"
+  },
+  "dependencies": {
+    "@bull-board/api": "9.8.0",
+    "@bull-board/express": "9.8.0",
+    "@bull-board/ui": "9.8.0",
+    "@hostpanel/db": "workspace:*",
+    "@hostpanel/jobs": "workspace:*",
+    "@hostpanel/notifications": "workspace:*",
+    "@hostpanel/shared": "workspace:*",
+    "bullmq": "^6.3.4",
+    "express": "^5.2.1",
+    "ioredis": "^6.0.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19",
+    "eslint": "^10.10.0",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.70.0",
+    "vitest": "^5.0.0"
+  }
+}

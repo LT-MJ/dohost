@@ -1,0 +1,759 @@
+// HostPanel — Phase 1 (Foundation) schema.
+//
+// Scope note: this schema covers the entities Phase 1 actually implements
+// (auth/RBAC, clients, product catalog, orders, invoices, audit). Later
+// phases (billing/ledger/subscriptions, domains/registrar, provisioning,
+// support) add their own models additively via new migrations — see
+// ARCHITECTURE.md for the full section-68 entity map and phase plan.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Tenancy — every business record hangs off a Tenant so multi-tenancy can be
+// introduced later without a schema rewrite. A single-business deployment
+// just has one Tenant row (see DEFAULT_TENANT_SLUG in .env).
+// ---------------------------------------------------------------------------
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  staffUsers               StaffUser[]
+  roles                    Role[]
+  staffSessions            StaffSession[]
+  clientSessions           ClientSession[]
+  clients                  Client[]
+  clientGroups             ClientGroup[]
+  productGroups            ProductGroup[]
+  products                 Product[]
+  productPrices            ProductPrice[]
+  orders                   Order[]
+  invoices                 Invoice[]
+  auditLogs                AuditLog[]
+  statusHistories          StatusHistory[]
+  systemSettings           SystemSetting[]
+  loginEvents              LoginEvent[]
+  emailLogs                EmailLog[]
+  counters                 Counter[]
+  emailVerificationTokens  EmailVerificationToken[]
+  passwordResetTokens      PasswordResetToken[]
+
+  @@map("tenants")
+}
+
+// ---------------------------------------------------------------------------
+// Staff identity & RBAC
+// ---------------------------------------------------------------------------
+
+enum StaffUserStatus {
+  ACTIVE
+  DISABLED
+}
+
+model StaffUser {
+  id                 String          @id @default(cuid())
+  tenantId           String
+  tenant             Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  email              String
+  passwordHash       String
+  name               String
+  roleId             String
+  role               Role            @relation(fields: [roleId], references: [id])
+  status             StaffUserStatus @default(ACTIVE)
+  mustChangePassword Boolean         @default(false)
+  emailVerifiedAt    DateTime?
+  twoFactorEnabled   Boolean         @default(false)
+  twoFactorSecret    String?
+  recoveryCodeHashes Json?
+  lockedUntil        DateTime?
+  lastLoginAt        DateTime?
+  lastLoginIp        String?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  deletedAt          DateTime?
+
+  sessions StaffSession[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId, status])
+  @@map("staff_users")
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  key         String
+  name        String
+  description String?
+  isSystem    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       StaffUser[]
+  permissions RolePermission[]
+
+  @@unique([tenantId, key])
+  @@map("roles")
+}
+
+/** Global permission catalog — code-defined, shared across tenants. */
+model Permission {
+  id          String  @id @default(cuid())
+  key         String  @unique
+  description String?
+  category    String
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+/**
+ * Auth.js is configured with the JWT session strategy for cookie/CSRF
+ * mechanics, but the JWT only ever carries an opaque session id — this
+ * table is the actual source of truth for "is this session still valid",
+ * which is what makes revocation and device history possible.
+ */
+model StaffSession {
+  id            String    @id @default(cuid())
+  tenantId      String
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId        String
+  user          StaffUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash     String    @unique
+  ip            String?
+  userAgent     String?
+  createdAt     DateTime  @default(now())
+  lastSeenAt    DateTime  @default(now())
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  revokedReason String?
+
+  @@index([userId])
+  @@index([tenantId])
+  @@map("staff_sessions")
+}
+
+// ---------------------------------------------------------------------------
+// Clients
+// ---------------------------------------------------------------------------
+
+enum ClientType {
+  INDIVIDUAL
+  COMPANY
+}
+
+enum ClientStatus {
+  ACTIVE
+  PENDING_VERIFICATION
+  SUSPENDED
+  CLOSED
+}
+
+enum RiskStatus {
+  NORMAL
+  REVIEW
+  BLOCKED
+}
+
+enum VerificationStatus {
+  UNVERIFIED
+  VERIFIED
+}
+
+model ClientGroup {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  clients       Client[]
+  productPrices ProductPrice[]
+
+  @@unique([tenantId, name])
+  @@map("client_groups")
+}
+
+/** The billing/account entity. Login credentials live on ClientContact. */
+model Client {
+  id                 String             @id @default(cuid())
+  tenantId           String
+  tenant             Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  type               ClientType         @default(INDIVIDUAL)
+  companyName        String?
+  firstName          String
+  lastName           String
+  email              String
+  phone              String?
+  addressLine1       String?
+  addressLine2       String?
+  city               String?
+  state              String?
+  postalCode         String?
+  country            String?
+  taxId              String?
+  currency           String             @default("USD")
+  language           String             @default("en")
+  timezone           String             @default("UTC")
+  clientGroupId      String?
+  clientGroup        ClientGroup?       @relation(fields: [clientGroupId], references: [id])
+  status             ClientStatus       @default(PENDING_VERIFICATION)
+  creditBalance      Int                @default(0)
+  riskStatus         RiskStatus         @default(NORMAL)
+  verificationStatus VerificationStatus @default(UNVERIFIED)
+  lastLoginAt        DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  contacts ClientContact[]
+  notes    ClientNote[]
+  orders   Order[]
+  invoices Invoice[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId, status])
+  @@index([tenantId, riskStatus])
+  @@map("clients")
+}
+
+model ClientNote {
+  id                String   @id @default(cuid())
+  tenantId          String
+  clientId          String
+  client            Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  body              String
+  authorStaffUserId String?
+  authorLabel       String
+  createdAt         DateTime @default(now())
+
+  @@index([clientId, createdAt])
+  @@map("client_notes")
+}
+
+enum ClientContactStatus {
+  ACTIVE
+  DISABLED
+}
+
+/** A person who can log in to the client portal on behalf of a Client. */
+model ClientContact {
+  id                 String               @id @default(cuid())
+  tenantId           String
+  clientId           String
+  client             Client               @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  email              String
+  passwordHash       String
+  firstName          String
+  lastName           String
+  isPrimary          Boolean              @default(false)
+  permBilling        Boolean              @default(false)
+  permSupport        Boolean              @default(false)
+  permDomains        Boolean              @default(false)
+  permServices       Boolean              @default(false)
+  status             ClientContactStatus  @default(ACTIVE)
+  emailVerifiedAt    DateTime?
+  twoFactorEnabled   Boolean              @default(false)
+  twoFactorSecret    String?
+  recoveryCodeHashes Json?
+  lockedUntil        DateTime?
+  lastLoginAt        DateTime?
+  lastLoginIp        String?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  deletedAt          DateTime?
+
+  sessions ClientSession[]
+
+  @@unique([tenantId, email])
+  @@index([clientId])
+  @@map("client_contacts")
+}
+
+/**
+ * impersonatedByStaffUserId turns admin impersonation (section 41) into an
+ * ordinary, short-lived, fully audited ClientSession row rather than a
+ * separate parallel mechanism — the impersonation banner in the UI is
+ * driven by this field being non-null.
+ */
+model ClientSession {
+  id                        String    @id @default(cuid())
+  tenantId                  String
+  tenant                    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contactId                 String
+  contact                   ClientContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tokenHash                 String    @unique
+  ip                        String?
+  userAgent                 String?
+  createdAt                 DateTime  @default(now())
+  lastSeenAt                DateTime  @default(now())
+  expiresAt                 DateTime
+  revokedAt                 DateTime?
+  revokedReason             String?
+  impersonatedByStaffUserId String?
+  impersonationReason       String?
+
+  @@index([contactId])
+  @@index([tenantId])
+  @@map("client_sessions")
+}
+
+enum AuthActorType {
+  STAFF
+  CLIENT_CONTACT
+}
+
+/** Append-only login attempt history — never updated, only inserted. */
+model LoginEvent {
+  id        String        @id @default(cuid())
+  tenantId  String
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  actorType AuthActorType
+  actorId   String?
+  email     String
+  success   Boolean
+  reason    String?
+  ip        String?
+  userAgent String?
+  createdAt DateTime      @default(now())
+
+  @@index([tenantId, email, createdAt])
+  @@index([tenantId, actorType, success, createdAt])
+  @@map("login_events")
+}
+
+model EmailVerificationToken {
+  id         String        @id @default(cuid())
+  tenantId   String
+  tenant     Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  actorType  AuthActorType
+  actorId    String
+  email      String
+  tokenHash  String        @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime      @default(now())
+
+  @@index([actorType, actorId])
+  @@map("email_verification_tokens")
+}
+
+model PasswordResetToken {
+  id         String        @id @default(cuid())
+  tenantId   String
+  tenant     Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  actorType  AuthActorType
+  actorId    String
+  tokenHash  String        @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime      @default(now())
+
+  @@index([actorType, actorId])
+  @@map("password_reset_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// Product catalog
+// ---------------------------------------------------------------------------
+
+enum ProductVisibility {
+  PUBLIC
+  HIDDEN
+}
+
+enum ProductStatus {
+  ACTIVE
+  RETIRED
+}
+
+model ProductGroup {
+  id          String            @id @default(cuid())
+  tenantId    String
+  tenant      Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  slug        String
+  description String?
+  sortOrder   Int               @default(0)
+  visibility  ProductVisibility @default(PUBLIC)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  deletedAt   DateTime?
+
+  products Product[]
+
+  @@unique([tenantId, slug])
+  @@map("product_groups")
+}
+
+model Product {
+  id             String            @id @default(cuid())
+  tenantId       String
+  tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  productGroupId String
+  productGroup   ProductGroup      @relation(fields: [productGroupId], references: [id], onDelete: Restrict)
+  name           String
+  slug           String
+  description    String?
+  visibility     ProductVisibility @default(PUBLIC)
+  status         ProductStatus     @default(ACTIVE)
+  stockLimit     Int?
+  stockUsed      Int               @default(0)
+  sortOrder      Int               @default(0)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  deletedAt      DateTime?
+
+  prices     ProductPrice[]
+  orderItems OrderItem[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId, productGroupId])
+  @@map("products")
+}
+
+enum BillingCycle {
+  ONE_TIME
+  MONTHLY
+  QUARTERLY
+  SEMI_ANNUAL
+  ANNUAL
+  BIENNIAL
+  TRIENNIAL
+  CUSTOM
+}
+
+/**
+ * Immutable, versioned pricing. "Changing a price" means inserting a new
+ * row with a fresh effectiveFrom and closing the previous row's
+ * effectiveTo — existing OrderItem/InvoiceItem snapshots never depend on a
+ * ProductPrice row continuing to exist or read the same way.
+ */
+model ProductPrice {
+  id            String       @id @default(cuid())
+  tenantId      String
+  tenant        Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  productId     String
+  product       Product      @relation(fields: [productId], references: [id], onDelete: Restrict)
+  clientGroupId String?
+  clientGroup   ClientGroup? @relation(fields: [clientGroupId], references: [id])
+  currency      String
+  billingCycle  BillingCycle
+  setupFee      Int          @default(0)
+  price         Int
+  isPromotional Boolean      @default(false)
+  effectiveFrom DateTime     @default(now())
+  effectiveTo   DateTime?
+  createdAt     DateTime     @default(now())
+
+  orderItems OrderItem[]
+
+  @@index([tenantId, productId, currency, billingCycle, effectiveFrom])
+  @@map("product_prices")
+}
+
+// ---------------------------------------------------------------------------
+// Orders — immutable line-item snapshots per section 11.
+// ---------------------------------------------------------------------------
+
+enum OrderStatus {
+  PENDING
+  AWAITING_PAYMENT
+  PAID
+  PROCESSING
+  ACTIVE
+  FRAUD_REVIEW
+  CANCELLED
+  FRAUD
+  REFUNDED
+  FAILED
+}
+
+model Order {
+  id             String      @id @default(cuid())
+  tenantId       String
+  tenant         Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  clientId       String
+  client         Client      @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  orderNumber    String
+  status         OrderStatus @default(PENDING)
+  currency       String
+  subtotal       Int
+  discountTotal  Int         @default(0)
+  taxTotal       Int         @default(0)
+  total          Int
+  idempotencyKey String?
+  ipAddress      String?
+  userAgent      String?
+  notes          String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  items    OrderItem[]
+  invoices Invoice[]
+
+  @@unique([tenantId, orderNumber])
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, clientId, status])
+  @@map("orders")
+}
+
+model OrderItem {
+  id                      String       @id @default(cuid())
+  tenantId                String
+  orderId                 String
+  order                   Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId               String?
+  product                 Product?     @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productPriceId          String?
+  productPrice            ProductPrice? @relation(fields: [productPriceId], references: [id], onDelete: SetNull)
+  productNameSnapshot     String
+  descriptionSnapshot     String?
+  quantity                Int          @default(1)
+  unitPriceSnapshot       Int
+  setupFeeSnapshot        Int          @default(0)
+  taxSnapshot             Int          @default(0)
+  discountSnapshot        Int          @default(0)
+  billingCycleSnapshot    BillingCycle
+  domainSnapshot          String?
+  selectedOptionsSnapshot Json?
+  lineTotal               Int
+  createdAt               DateTime     @default(now())
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+// ---------------------------------------------------------------------------
+// Invoices — historical snapshots per section 17. Never rewritten once
+// issued; corrections happen via new status transitions / future
+// credit-note & ledger entries (Phase 2).
+// ---------------------------------------------------------------------------
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  COLLECTIONS
+  CANCELLED
+  REFUNDED
+}
+
+model Invoice {
+  id               String        @id @default(cuid())
+  tenantId         String
+  tenant           Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  clientId         String
+  client           Client        @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  orderId          String?
+  order            Order?        @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  invoiceNumber    String
+  status           InvoiceStatus @default(DRAFT)
+  currency         String
+  subtotal         Int
+  discountTotal    Int           @default(0)
+  taxTotal         Int           @default(0)
+  total            Int
+  amountPaid       Int           @default(0)
+  amountDue        Int
+  dueDate          DateTime
+  issuedAt         DateTime?
+  paidAt           DateTime?
+  /// Snapshot of the client's billing details at issue time.
+  customerSnapshot Json
+  /// Snapshot of the operator/company details at issue time.
+  companySnapshot  Json
+  notes            String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  items InvoiceItem[]
+
+  @@unique([tenantId, invoiceNumber])
+  @@index([tenantId, clientId, status])
+  @@index([tenantId, status, dueDate])
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id                String   @id @default(cuid())
+  tenantId          String
+  invoiceId         String
+  invoice           Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  sourceOrderItemId String?
+  description       String
+  quantity          Int      @default(1)
+  unitPrice         Int
+  taxAmount         Int      @default(0)
+  discountAmount    Int      @default(0)
+  lineTotal         Int
+  createdAt         DateTime @default(now())
+
+  @@index([invoiceId])
+  @@map("invoice_items")
+}
+
+// ---------------------------------------------------------------------------
+// Cross-cutting: state history, audit log, settings, counters, email log
+// ---------------------------------------------------------------------------
+
+enum AuditActorType {
+  STAFF
+  CLIENT_CONTACT
+  SYSTEM
+}
+
+enum StatusHistoryEntityType {
+  ORDER
+  INVOICE
+  CLIENT
+}
+
+/**
+ * Generic state-transition trail (section 54). Domain services call
+ * `recordStatusTransition(...)` inside the same DB transaction as the
+ * status write itself — never written to directly from UI/API code.
+ */
+model StatusHistory {
+  id         String                   @id @default(cuid())
+  tenantId   String
+  tenant     Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  entityType StatusHistoryEntityType
+  entityId   String
+  fromStatus String?
+  toStatus   String
+  actorType  AuditActorType
+  actorId    String?
+  reason     String?
+  metadata   Json?
+  createdAt  DateTime                 @default(now())
+
+  @@index([tenantId, entityType, entityId, createdAt])
+  @@map("status_histories")
+}
+
+enum AuditEntityType {
+  CLIENT
+  CLIENT_CONTACT
+  STAFF_USER
+  ROLE
+  PRODUCT_GROUP
+  PRODUCT
+  PRODUCT_PRICE
+  ORDER
+  INVOICE
+  SYSTEM_SETTING
+  STAFF_SESSION
+  CLIENT_SESSION
+  IMPERSONATION
+}
+
+/**
+ * Append-only from the application's perspective: no service in the
+ * codebase should ever call `auditLog.update` or `.delete`. actorId is
+ * intentionally a plain (non-FK) reference so a log entry survives the
+ * deletion/deactivation of the account that performed the action.
+ */
+model AuditLog {
+  id          String          @id @default(cuid())
+  tenantId    String
+  tenant      Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  actorType   AuditActorType
+  actorId     String?
+  actorLabel  String?
+  action      String
+  entityType  AuditEntityType
+  entityId    String
+  ip          String?
+  userAgent   String?
+  requestId   String?
+  beforeState Json?
+  afterState  Json?
+  reason      String?
+  metadata    Json?
+  createdAt   DateTime        @default(now())
+
+  @@index([tenantId, entityType, entityId, createdAt])
+  @@index([tenantId, action, createdAt])
+  @@index([tenantId, actorType, actorId, createdAt])
+  @@map("audit_logs")
+}
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  key       String
+  value     Json
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+
+  @@unique([tenantId, key])
+  @@map("system_settings")
+}
+
+/** Atomic sequence generator backing invoice/order numbering. */
+model Counter {
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  key      String
+  value    Int    @default(0)
+
+  @@id([tenantId, key])
+  @@map("counters")
+}
+
+enum EmailStatus {
+  QUEUED
+  SENT
+  FAILED
+}
+
+model EmailLog {
+  id                String      @id @default(cuid())
+  tenantId          String
+  tenant            Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  toEmail           String
+  templateKey       String
+  subject           String
+  status            EmailStatus @default(QUEUED)
+  providerMessageId String?
+  error             String?
+  relatedEntityType String?
+  relatedEntityId   String?
+  attempts          Int         @default(0)
+  createdAt         DateTime    @default(now())
+  sentAt            DateTime?
+
+  @@index([tenantId, toEmail, createdAt])
+  @@index([tenantId, status])
+  @@map("email_logs")
+}
