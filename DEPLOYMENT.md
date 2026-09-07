@@ -6,6 +6,42 @@ A production deployment guide specific to any one hosting target
 what's true regardless of target, and what production requires that isn't
 optional.
 
+## Vercel (`apps/web` only — partial)
+
+This repo is git-linked to a Vercel project for `apps/web`. Two things to
+know before treating "deployed to Vercel" as "the system is running":
+
+- **The build itself needed a fix.** `packages/db` produces its Prisma
+  Client via a gitignored codegen step (`prisma generate`) that was never
+  wired into any build pipeline — only ever run manually
+  (`pnpm db:generate`). `apps/web`'s build imports that generated module,
+  so Vercel's build failed with `Module not found`. Fixed by giving
+  `packages/db` a `"build": "prisma generate"` script (so Turborepo's
+  `dependsOn: ["^build"]` graph runs it before `apps/web` builds) and by
+  changing `prisma.config.ts`'s datasource `url` from prisma/config's
+  `env()` helper (throws at config-*load* time if unset) to plain
+  `process.env.DATABASE_URL` (`generate` never opens a connection, so it
+  shouldn't require one to run — only `migrate`/`studio`/`db seed` do, and
+  those still fail with a clear Prisma CLI error when it's genuinely
+  unset). `typecheck`/`lint`/`test` needed the same same-package `"build"`
+  added to their own `dependsOn` in `turbo.json`, since `^build` only
+  covers a package's *upstream* dependencies, not its own build task.
+- **`apps/worker` cannot run on Vercel at all.** It's a persistent BullMQ
+  worker process (see "What has to run" above) — Vercel's platform is
+  serverless request/response functions, not long-running processes. Every
+  transactional email (verification, password reset, staff invites, and
+  every future job type) is processed there, not inline in a request
+  handler. A Vercel deployment of `apps/web` alone will accept requests
+  but never actually send email until `apps/worker` also runs somewhere
+  that supports persistent processes (a VPS, a container platform, etc.).
+- **Production environment variables are a deployment-by-deployment
+  responsibility.** The build succeeding doesn't mean the app boots — see
+  "Before going to production" above; `packages/shared/src/config/env.ts`
+  fails startup immediately, with a specific message, if a required
+  variable is missing. Configure them as real Vercel project environment
+  variables (not a committed `.env`), never reuse a dev/staging
+  `AUTH_SECRET`/`ENCRYPTION_KEY`.
+
 ## What has to run
 
 Three independent processes, plus two managed services:
