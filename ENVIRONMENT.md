@@ -59,7 +59,12 @@ In a real deployment, set these as actual process environment variables
 If the selected provider's required credentials are missing **in
 production** (`NODE_ENV=production`), startup fails immediately rather than
 silently dropping emails — see `validateProductionRequirements` in
-`packages/shared/src/config/env.ts`.
+`packages/shared/src/config/env.ts`. Like `REDIS_URL`, this is a
+presence check, not a real-credential check — `RESEND_API_KEY` isn't
+validated against Resend's API, and `SMTP_HOST`/`SMTP_PORT` aren't
+tested for connectivity, until an email actually tries to send (see
+`packages/notifications`). A placeholder value unblocks startup the
+same way; it doesn't mean email actually works.
 
 ## Object storage (declared, not yet used)
 
