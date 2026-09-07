@@ -70,6 +70,22 @@ know before treating "deployed to Vercel" as "the system is running":
   without either a new commit or re-uploading the entire source tree as
   a one-off file-based deployment — both env var changes and forcing a
   redeploy of already-pushed code currently require the dashboard.
+  A few of these required variables (`REDIS_URL`, and `RESEND_API_KEY`/
+  `SMTP_HOST`/`SMTP_PORT` depending on `EMAIL_PROVIDER`) are validated
+  for presence only, not for actually working — see ENVIRONMENT.md — so
+  a placeholder unblocks startup without meaning that functionality
+  works; don't mistake "the app boots" for "email sends."
+- **Connecting to Supabase's Postgres pooler over `@prisma/adapter-pg`
+  needs an explicit SSL mode.** Without one, `pg` attempts full
+  certificate-chain verification against the pooler's endpoint and fails
+  with `P1011: Error opening a TLS connection: self-signed certificate
+  in certificate chain` — a known quirk of connecting a generic `pg`
+  client to Supabase's pgbouncer, not a bug in this codebase. Append
+  `&uselibpqcompat=true&sslmode=require` to `DATABASE_URL`'s query
+  string (still encrypted, just not validated against a public CA —
+  `pg`'s own runtime warning is what names this exact parameter
+  combination; without `uselibpqcompat=true`, `sslmode=require` is
+  currently aliased to `verify-full` and fails the same way).
 
 ## What has to run
 
