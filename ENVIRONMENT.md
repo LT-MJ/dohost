@@ -36,7 +36,7 @@ In a real deployment, set these as actual process environment variables
 | `APP_NAME` | Shown in email templates and page titles. Never hardcode the business name in code — this is why. |
 | `DEFAULT_TENANT_SLUG` | The single tenant the seed script creates and `getDefaultTenant()` resolves, for a single-business deployment. |
 | `DATABASE_URL` | Postgres connection string, e.g. `postgresql://user:pass@host:5432/db?schema=public`. |
-| `REDIS_URL` | Redis connection string for BullMQ, e.g. `redis://localhost:6379`. |
+| `REDIS_URL` | Redis connection string for BullMQ, e.g. `redis://localhost:6379`. Startup only checks that this is a non-empty string, not that it's reachable — BullMQ connects lazily on first enqueue/dequeue (same lazy pattern as the Prisma client; see ARCHITECTURE.md). A placeholder value lets the app boot and serve pages that don't touch the job queue; anything that actually enqueues (registration, password reset, staff invite emails) will fail at that point instead, with a connection error, until this points at a real, reachable Redis. |
 | `BULL_BOARD_PORT` | Port the worker serves the Bull Board queue-monitoring UI on. Default `3001`. |
 
 ## Auth
