@@ -86,6 +86,26 @@ know before treating "deployed to Vercel" as "the system is running":
   `pg`'s own runtime warning is what names this exact parameter
   combination; without `uselibpqcompat=true`, `sslmode=require` is
   currently aliased to `verify-full` and fails the same way).
+- **`apps/web`'s build now runs `prisma migrate deploy` first.** A fresh
+  production database has no schema at all — every query fails with
+  `P2021: table does not exist` until migrations run, and unlike this
+  session's own sandbox, Vercel's build environment can actually reach
+  the database (this sandbox's outbound network could not, confirmed by
+  running the same command directly and hitting `P1001`). Wired via a
+  package-scoped `apps/web/turbo.json` (Turborepo's "Package
+  Configurations") adding `@hostpanel/db#migrate:deploy` as a `build`
+  dependency *only* for `apps/web` — `typecheck`/`lint`/`test` still use
+  the root task config unchanged, since they don't need a live database
+  and shouldn't gain one as a side effect. That task is marked
+  `"cache": false` in the root `turbo.json`: caching it by input-file
+  hash would risk a false cache hit skipping the real migration run
+  against a different, unmigrated database that happens to have the
+  same schema files. `migrate deploy` is itself idempotent, so running
+  it on every build has no cost once migrations are already applied —
+  the risk this trades in is running schema changes automatically on
+  every deploy with no separate review step, acceptable for this
+  project's current pre-launch stage but worth reconsidering once real
+  traffic exists.
 
 ## What has to run
 
