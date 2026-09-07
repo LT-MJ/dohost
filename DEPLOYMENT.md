@@ -100,7 +100,18 @@ know before treating "deployed to Vercel" as "the system is running":
   `"cache": false` in the root `turbo.json`: caching it by input-file
   hash would risk a false cache hit skipping the real migration run
   against a different, unmigrated database that happens to have the
-  same schema files. `migrate deploy` is itself idempotent, so running
+  same schema files. It also needed `"env": ["DATABASE_URL"]` on that
+  same task — Turborepo filters which environment variables a task's
+  process actually receives independently of whether the variable
+  exists in the real environment, which is a completely different
+  question from whether the *deployed app* can see it at runtime (Vercel
+  injects env vars into the Lambda directly; that path already worked,
+  proven by the P2021 error above coming from a real, connected query).
+  Omitting this `env` declaration failed with "The datasource.url
+  property is required", easy to misread as the same config problem
+  `prisma.config.ts` already handles, when it was really about what
+  Turborepo's build-time task runner passes through, not the config
+  file's own logic. `migrate deploy` is itself idempotent, so running
   it on every build has no cost once migrations are already applied —
   the risk this trades in is running schema changes automatically on
   every deploy with no separate review step, acceptable for this

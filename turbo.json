@@ -24,7 +24,8 @@
       "dependsOn": ["build"]
     },
     "migrate:deploy": {
-      "cache": false
+      "cache": false,
+      "env": ["DATABASE_URL"]
     },
     "clean": {
       "cache": false
