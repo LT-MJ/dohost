@@ -40,7 +40,18 @@ know before treating "deployed to Vercel" as "the system is running":
   fails startup immediately, with a specific message, if a required
   variable is missing. Configure them as real Vercel project environment
   variables (not a committed `.env`), never reuse a dev/staging
-  `AUTH_SECRET`/`ENCRYPTION_KEY`.
+  `AUTH_SECRET`/`ENCRYPTION_KEY`. **Adding or changing a variable does not
+  affect existing deployments** — Vercel injects the project's current
+  variables at deploy time, not on every request, so an already-built
+  deployment keeps running with whatever was configured when it was
+  built. Trigger a fresh deployment afterward (dashboard: Deployments →
+  the deployment → Redeploy; or push a new commit, which the git
+  integration auto-deploys) for a variable change to take effect.
+  There's no Vercel API/MCP action that reads or writes a project's
+  environment variables, or that redeploys an existing deployment
+  without either a new commit or re-uploading the entire source tree as
+  a one-off file-based deployment — both env var changes and forcing a
+  redeploy of already-pushed code currently require the dashboard.
 
 ## What has to run
 
