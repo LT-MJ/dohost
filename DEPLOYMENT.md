@@ -26,6 +26,24 @@ know before treating "deployed to Vercel" as "the system is running":
   unset). `typecheck`/`lint`/`test` needed the same same-package `"build"`
   added to their own `dependsOn` in `turbo.json`, since `^build` only
   covers a package's *upstream* dependencies, not its own build task.
+  A second, sneakier version of the same bug followed: `packages/db`'s
+  `build` task had no `outputs` declared, so it silently inherited the
+  root task config's `[".next/**", "dist/**"]` — neither of which matches
+  what `prisma generate` actually writes (`generated/**`). The first
+  deployment worked anyway (a cache *miss* runs the command for real,
+  and `apps/web`'s build reads the file moments later from the same
+  build container's disk regardless of what got cached). A *later*
+  deployment, where nothing under `packages/db` had changed, got a cache
+  *hit* — Turborepo correctly skipped re-running `prisma generate` but,
+  since the real output was never a declared `outputs` pattern, had
+  nothing to restore either, so `generated/prisma/client` simply didn't
+  exist and `apps/web`'s build failed the same `Module not found` way.
+  Fixed with a package-level `packages/db/turbo.json` (Turborepo's
+  "Package Configurations" feature) declaring `outputs: ["generated/**"]`
+  for that package's `build` task specifically, verified by forcing the
+  exact failure locally (delete `packages/db/generated`, rebuild, confirm
+  Turborepo reports a cache hit *and* the file is actually restored to
+  disk before trusting it against real Vercel builds again).
 - **`apps/worker` cannot run on Vercel at all.** It's a persistent BullMQ
   worker process (see "What has to run" above) — Vercel's platform is
   serverless request/response functions, not long-running processes. Every
