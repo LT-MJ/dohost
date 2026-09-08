@@ -117,6 +117,19 @@ know before treating "deployed to Vercel" as "the system is running":
   every deploy with no separate review step, acceptable for this
   project's current pre-launch stage but worth reconsidering once real
   traffic exists.
+- **`migrate deploy` hung (not errored) through Supabase's pooler.** Once
+  the env-passthrough above was fixed, the datasource resolved correctly
+  but the command itself never completed — no error, no progress, just
+  stuck. `migrate deploy` holds an advisory lock for its duration, which
+  a transaction-mode pooler (Supabase's pgbouncer, port `6543`,
+  `pgbouncer=true`) doesn't support: each statement can land on a
+  different underlying connection, so the lock silently never resolves.
+  Fixed with a `DIRECT_URL` env var (see ENVIRONMENT.md) — a non-pooled
+  connection string read only by `packages/db/prisma.config.ts` for CLI
+  purposes, never by the app's own `PrismaClient` (which builds its
+  connection straight from `DATABASE_URL` in `src/client.ts`, unaffected
+  by this). `DATABASE_URL` keeps using the pooler, which is fine — even
+  preferred — for the app's actual runtime queries.
 
 ## What has to run
 

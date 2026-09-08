@@ -26,6 +26,19 @@ export default defineConfig({
     // to run it with no database configured at all) — only `migrate`/`studio`/
     // `db seed` actually need one, and they already fail with a clear,
     // actionable error from the Prisma CLI itself when `url` is undefined.
-    url: process.env.DATABASE_URL,
+    //
+    // DIRECT_URL (optional) takes priority when set: `migrate deploy` needs
+    // to hold an advisory lock for the duration of the command, which a
+    // transaction-mode connection pooler (e.g. Supabase's pgbouncer on
+    // port 6543) doesn't support — every statement can land on a different
+    // underlying connection, so the lock silently never resolves and the
+    // command just hangs. The running app is unaffected either way: this
+    // config file only feeds the Prisma CLI (generate/migrate/studio/db
+    // seed), never the app's own PrismaClient, which builds its own
+    // connection straight from DATABASE_URL in src/client.ts. Point
+    // DIRECT_URL at the non-pooled connection string (Supabase: port 5432,
+    // no `pgbouncer=true`) and leave DATABASE_URL as the pooled one the app
+    // should keep using at runtime.
+    url: process.env.DIRECT_URL ?? process.env.DATABASE_URL,
   },
 });

@@ -5,6 +5,15 @@
     "build": {
       "dependsOn": ["^build", "@hostpanel/db#migrate:deploy"],
       "outputs": [".next/**", "!.next/cache/**", "dist/**"]
+    },
+    "typecheck": {
+      "dependsOn": ["^build"]
+    },
+    "lint": {
+      "dependsOn": ["^build"]
+    },
+    "test": {
+      "dependsOn": ["^build"]
     }
   }
 }
