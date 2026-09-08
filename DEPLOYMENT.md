@@ -130,6 +130,12 @@ know before treating "deployed to Vercel" as "the system is running":
   connection straight from `DATABASE_URL` in `src/client.ts`, unaffected
   by this). `DATABASE_URL` keeps using the pooler, which is fine — even
   preferred — for the app's actual runtime queries.
+- **A hung build blocks the next one, with no way to cancel it via the
+  Vercel MCP tools available here.** Vercel builds run one at a time per
+  project; a deployment stuck the way the one above was (nothing errors,
+  it just never finishes) queues every subsequent push behind it until
+  it eventually times out on its own. Cancelling it early — Deployments
+  tab → the stuck one → **Cancel** — needs the dashboard.
 
 ## What has to run
 
